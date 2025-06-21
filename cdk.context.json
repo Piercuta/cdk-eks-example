@@ -3,5 +3,9 @@
     "eu-west-1a",
     "eu-west-1b",
     "eu-west-1c"
-  ]
+  ],
+  "hosted-zone:account=532673134317:domainName=piercuta.com:region=eu-west-1": {
+    "Id": "/hostedzone/Z0068506UV3AK4JBKP59",
+    "Name": "piercuta.com."
+  }
 }
