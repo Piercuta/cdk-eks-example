@@ -10,7 +10,7 @@ from aws_cdk import Duration
 import json
 
 
-class EksClusterStack(Stack):
+class EksClassicClusterStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -21,12 +21,11 @@ class EksClusterStack(Stack):
         # 2. Cluster EKS
         cluster = eks.Cluster(
             self, "FastApiEksCluster",
-            # cluster_name="fastapi-eks-cluster",
             version=eks.KubernetesVersion.V1_32,
             vpc=vpc,
             kubectl_layer=KubectlV32Layer(self, "KubectlLayer"),
-            default_capacity=2,
-            default_capacity_instance=ec2.InstanceType("t3.large"),
+            default_capacity=1,
+            default_capacity_instance=ec2.InstanceType("m5.xlarge"),
             cluster_logging=[
                 eks.ClusterLoggingTypes.API,
                 eks.ClusterLoggingTypes.AUDIT,
@@ -89,14 +88,13 @@ class EksClusterStack(Stack):
             }
         }
         cloudwatch_namespace = cluster.add_manifest("CloudWatchNamespace", cloudwatch_ns)
+        cloudwatch_namespace.node.add_dependency(alb_chart)
 
         cloudwatch_sa = cluster.add_service_account(
             "CloudWatchAgentSA",
             name="cloudwatch-agent",
             namespace="amazon-cloudwatch"
         )
-
-        cloudwatch_sa.node.add_dependency(cloudwatch_namespace)
 
         cloudwatch_policy_doc = iam.PolicyDocument.from_json(
             json.load(open("policy/cloudwatch-logs-policy.json"))
@@ -105,6 +103,7 @@ class EksClusterStack(Stack):
         cloudwatch_sa.role.attach_inline_policy(
             iam.Policy(self, "CloudWatchPolicy", document=cloudwatch_policy_doc)
         )
+        cloudwatch_sa.node.add_dependency(cloudwatch_namespace)
 
         cloudwatch_chart = cluster.add_helm_chart(
             "CloudWatchAgentChart",
@@ -122,11 +121,10 @@ class EksClusterStack(Stack):
             }
         )
 
-        cloudwatch_chart.node.add_dependency(alb_chart)
-        cloudwatch_chart.node.add_dependency(cloudwatch_namespace)
+        cloudwatch_chart.node.add_dependency(cloudwatch_sa)
 
         # 4. Metrics Server
-        cluster.add_helm_chart(
+        metrics_server = cluster.add_helm_chart(
             "MetricsServer",
             chart="metrics-server",
             repository="https://kubernetes-sigs.github.io/metrics-server/",
@@ -138,6 +136,8 @@ class EksClusterStack(Stack):
                 ]
             }
         )
+
+        metrics_server.node.add_dependency(cloudwatch_chart)
 
         # 5. FluentBit
 
@@ -165,3 +165,4 @@ class EksClusterStack(Stack):
 
         self.eks_cluster = cluster
         self.alb_chart = alb_chart
+        self.metrics_server = metrics_server

@@ -6,13 +6,14 @@ from aws_cdk import Duration
 from constructs import Construct
 
 
-class EksFastApiServiceStack(Stack):
+class EksClassicFastApiServiceStack(Stack):
 
     def __init__(self,
                  scope: Construct,
                  construct_id: str,
                  cluster: eks.Cluster,
                  alb_chart: eks.HelmChart,
+                 metric_server: eks.HelmChart,
                  **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -143,13 +144,11 @@ class EksFastApiServiceStack(Stack):
 
         # Ordre logique :
         fastapi_deployment.node.add_dependency(alb_chart)
+        fastapi_deployment.node.add_dependency(metric_server)
 
         fastapi_service.node.add_dependency(fastapi_deployment)
-
-        fastapi_ingress.node.add_dependency(alb_chart)
-        fastapi_ingress.node.add_dependency(fastapi_service)
-        fastapi_ingress.node.add_dependency(fastapi_deployment)
         fastapi_hpa.node.add_dependency(fastapi_service)
+        fastapi_ingress.node.add_dependency(fastapi_hpa)
 
         # 5. A Record pointant vers l'ALB
         hosted_zone = route53.HostedZone.from_lookup(
