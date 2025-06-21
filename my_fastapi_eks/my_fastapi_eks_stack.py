@@ -21,6 +21,7 @@ class MyFastapiEksStack(Stack):
         # 2. Cluster EKS
         cluster = eks.Cluster(
             self, "FastApiEksCluster",
+            # cluster_name="fastapi-eks-cluster",
             version=eks.KubernetesVersion.V1_32,
             vpc=vpc,
             kubectl_layer=KubectlV32Layer(self, "KubectlLayer"),
@@ -59,10 +60,35 @@ class MyFastapiEksStack(Stack):
             iam.Policy(self, "ALBControllerIAMPolicy", document=alb_policy)
         )
 
-        # 3. CloudWatch Agent
-        cloudwatch_policy_doc = iam.PolicyDocument.from_json(
-            json.load(open("policy/cloudwatch-logs-policy.json"))
+        alb_chart = cluster.add_helm_chart(
+            "AWSLoadBalancerController",
+            chart="aws-load-balancer-controller",
+            repository="https://aws.github.io/eks-charts",
+            namespace="kube-system",
+            release="alb-controller",
+            version="1.7.1",  # ou dernière version stable
+            values={
+                "clusterName": cluster.cluster_name,
+                "serviceAccount": {
+                    "create": False,
+                    "name": "aws-load-balancer-controller"
+                },
+                "region": self.region,
+                "vpcId": vpc.vpc_id,
+                "replicaCount": 2
+            }
         )
+
+        # 3. CloudWatch Agent
+
+        cloudwatch_ns = {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+                "name": "amazon-cloudwatch"
+            }
+        }
+        cloudwatch_namespace = cluster.add_manifest("CloudWatchNamespace", cloudwatch_ns)
 
         cloudwatch_sa = cluster.add_service_account(
             "CloudWatchAgentSA",
@@ -70,11 +96,17 @@ class MyFastapiEksStack(Stack):
             namespace="amazon-cloudwatch"
         )
 
+        cloudwatch_sa.node.add_dependency(cloudwatch_namespace)
+
+        cloudwatch_policy_doc = iam.PolicyDocument.from_json(
+            json.load(open("policy/cloudwatch-logs-policy.json"))
+        )
+
         cloudwatch_sa.role.attach_inline_policy(
             iam.Policy(self, "CloudWatchPolicy", document=cloudwatch_policy_doc)
         )
 
-        cluster.add_helm_chart(
+        cloudwatch_chart = cluster.add_helm_chart(
             "CloudWatchAgentChart",
             chart="aws-cloudwatch-metrics",
             release="cloudwatch-agent",
@@ -89,6 +121,9 @@ class MyFastapiEksStack(Stack):
                 "region": self.region
             }
         )
+
+        cloudwatch_chart.node.add_dependency(alb_chart)
+        cloudwatch_chart.node.add_dependency(cloudwatch_namespace)
 
         # cluster.add_helm_chart(
         #     "FluentBitChart",
@@ -111,25 +146,6 @@ class MyFastapiEksStack(Stack):
         #         "elasticsearch": {"enabled": False}
         #     }
         # )
-
-        cluster.add_helm_chart(
-            "AWSLoadBalancerController",
-            chart="aws-load-balancer-controller",
-            repository="https://aws.github.io/eks-charts",
-            namespace="kube-system",
-            release="alb-controller",
-            version="1.7.1",  # ou dernière version stable
-            values={
-                "clusterName": cluster.cluster_name,
-                "serviceAccount": {
-                    "create": False,
-                    "name": "aws-load-balancer-controller"
-                },
-                "region": self.region,
-                "vpcId": vpc.vpc_id,
-                "replicaCount": 2
-            }
-        )
 
         # 3. Déploiement FastAPI depuis une image ECR
         image_uri = "532673134317.dkr.ecr.eu-west-1.amazonaws.com/services/eks/fastapi_hello_world:latest"
@@ -173,7 +189,7 @@ class MyFastapiEksStack(Stack):
             "metadata": {
                 "name": "fastapi-ingress",
                 "annotations": {
-                    "kubernetes.io/ingress.class": "alb",
+                    "ingressClassName": "alb",
                     "alb.ingress.kubernetes.io/scheme": "internet-facing",
                     "alb.ingress.kubernetes.io/target-type": "ip",
                     "alb.ingress.kubernetes.io/listen-ports": '[{"HTTP": 80, "HTTPS": 443}]',
@@ -205,29 +221,45 @@ class MyFastapiEksStack(Stack):
         }
 
         # 4. Apply les manifests
-        cluster.add_manifest("FastApiDeployment", deployment)
-        cluster.add_manifest("FastApiService", service)
-        cluster.add_manifest("FastApiIngress", ingress)
-
-        # 5. A Record pointant vers l'ALB
-        hosted_zone = route53.HostedZone.from_lookup(
-            self, "HostedZone",
-            domain_name="piercuta.com"
-        )
-
-        # route53.ARecord(
-        #     self, "FastApiAliasRecord",
-        #     zone=hosted_zone,
-        #     record_name="my-fastapi",
-        #     target=route53.RecordTarget.from_values(
-        #         cluster.get_ingress_load_balancer_address("FastApiIngress")
-        #     )
+        # cluster.add_manifest(
+        #     "FastApiDeployment",
+        #     deployment,
+        #     service,
+        #     ingress
         # )
 
-        route53.CnameRecord(
-            self, "FastApiCnameRecord",
-            zone=hosted_zone,
-            record_name="my-fastapi",  # Cela crée my-fastapi.piercuta.com
-            domain_name="k8s-default-fastapii-3541f9c717-272254031.eu-west-1.elb.amazonaws.com",  # <--- Remplace par le bon DNS ALB
-            ttl=Duration.minutes(5)
-        )
+        fastapi_deployment = cluster.add_manifest("FastApiDeployment", deployment)
+        fastapi_service = cluster.add_manifest("FastApiService", service)
+        fastapi_ingress = cluster.add_manifest("FastApiIngress", ingress)
+
+        # Ordre logique :
+        fastapi_service.node.add_dependency(fastapi_deployment)
+
+        fastapi_deployment.node.add_dependency(alb_chart)
+
+        fastapi_ingress.node.add_dependency(alb_chart)
+        fastapi_ingress.node.add_dependency(fastapi_service)
+        fastapi_ingress.node.add_dependency(fastapi_deployment)
+
+        # 5. A Record pointant vers l'ALB
+        # hosted_zone = route53.HostedZone.from_lookup(
+        #     self, "HostedZone",
+        #     domain_name="piercuta.com"
+        # )
+
+        # # route53.ARecord(
+        # #     self, "FastApiAliasRecord",
+        # #     zone=hosted_zone,
+        # #     record_name="my-fastapi",
+        # #     target=route53.RecordTarget.from_values(
+        # #         cluster.get_ingress_load_balancer_address("FastApiIngress")
+        # #     )
+        # # )
+
+        # route53.CnameRecord(
+        #     self, "FastApiCnameRecord",
+        #     zone=hosted_zone,
+        #     record_name="my-fastapi",  # Cela crée my-fastapi.piercuta.com
+        #     domain_name="k8s-default-fastapii-3541f9c717-272254031.eu-west-1.elb.amazonaws.com",  # <--- Remplace par le bon DNS ALB
+        #     ttl=Duration.minutes(5)
+        # )

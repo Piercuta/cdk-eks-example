@@ -10,6 +10,12 @@ app = cdk.App()
 MyFastapiEksStack(
     app,
     "MyFastapiEksStack",
+    stack_name="MyFastapiEksStack",
+    tags={
+        "project": "fastapi-eks",
+        "env": "test",
+        "owner": "pcourteille"
+    },
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
     # If you don't specify 'env', this stack will be environment-agnostic.
     # Account/Region-dependent features and context lookups will not work,
