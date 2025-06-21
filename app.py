@@ -3,35 +3,34 @@ import os
 
 import aws_cdk as cdk
 
-from my_fastapi_eks.my_fastapi_eks_stack import MyFastapiEksStack
-
+from my_fastapi_eks.eks_cluster_stack import EksClusterStack
+from my_fastapi_eks.eks_fast_api_service_stack import EksFastApiServiceStack
 
 app = cdk.App()
-MyFastapiEksStack(
+eks_cluster_stack = EksClusterStack(
     app,
-    "MyFastapiEksStack",
-    stack_name="MyFastapiEksStack",
+    "EksClusterStack",
+    stack_name="EksClusterStack",
     tags={
         "project": "fastapi-eks",
-        "env": "test",
+        "env": "dev",
         "owner": "pcourteille"
     },
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
-    # If you don't specify 'env', this stack will be environment-agnostic.
-    # Account/Region-dependent features and context lookups will not work,
-    # but a single synthesized template can be deployed anywhere.
+)
 
-    # Uncomment the next line to specialize this stack for the AWS Account
-    # and Region that are implied by the current CLI configuration.
-
-    # env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
-
-    # Uncomment the next line if you know exactly what Account and Region you
-    # want to deploy the stack to. */
-
-    # env=cdk.Environment(account='123456789012', region='us-east-1'),
-
-    # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
+eks_service_stack = EksFastApiServiceStack(
+    app,
+    "EksFastApiServiceStack",
+    stack_name="EksFastApiServiceStack",
+    cluster=eks_cluster_stack.eks_cluster,
+    alb_chart=eks_cluster_stack.alb_chart,
+    tags={
+        "project": "fastapi-eks",
+        "env": "dev",
+        "owner": "pcourteille"
+    },
+    env=cdk.Environment(account="532673134317", region="eu-west-1"),
 )
 
 app.synth()
