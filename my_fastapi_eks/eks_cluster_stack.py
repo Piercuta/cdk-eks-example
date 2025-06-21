@@ -26,7 +26,7 @@ class EksClusterStack(Stack):
             vpc=vpc,
             kubectl_layer=KubectlV32Layer(self, "KubectlLayer"),
             default_capacity=2,
-            default_capacity_instance=ec2.InstanceType("t3.small"),
+            default_capacity_instance=ec2.InstanceType("t3.large"),
             cluster_logging=[
                 eks.ClusterLoggingTypes.API,
                 eks.ClusterLoggingTypes.AUDIT,
