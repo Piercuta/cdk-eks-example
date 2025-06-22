@@ -3,8 +3,8 @@ import os
 
 import aws_cdk as cdk
 
-from my_fastapi_eks.eks_classic_cluster_stack import EksClassicClusterStack
-from my_fastapi_eks.eks_classic_fastapi_service_stack import EksClassicFastApiServiceStack
+from my_fastapi_eks.classic.eks_classic_cluster_stack import EksClassicClusterStack
+from my_fastapi_eks.classic.eks_classic_fastapi_service_stack import EksClassicFastApiServiceStack
 
 app = cdk.App()
 eks_cluster_stack = EksClassicClusterStack(
@@ -12,9 +12,8 @@ eks_cluster_stack = EksClassicClusterStack(
     "EksClassicClusterStack",
     stack_name="EksClassicClusterStack",
     tags={
-        "project": "fastapi-eks",
+        "project": "classic-eks",
         "env": "dev",
-        "owner": "pcourteille"
     },
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
 )
@@ -27,9 +26,8 @@ eks_service_stack = EksClassicFastApiServiceStack(
     alb_chart=eks_cluster_stack.alb_chart,
     metric_server=eks_cluster_stack.metrics_server,
     tags={
-        "project": "fastapi-eks",
+        "project": "classic-eks",
         "env": "dev",
-        "owner": "pcourteille"
     },
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
 )

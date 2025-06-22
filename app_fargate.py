@@ -3,8 +3,8 @@ import os
 
 import aws_cdk as cdk
 
-from my_fastapi_eks.eks_fargate_cluster_stack import EksFargateClusterStack
-from my_fastapi_eks.eks_fargate_fastapi_service_stack import EksFargateFastApiServiceStack
+from my_fastapi_eks.fargate.eks_fargate_cluster_stack import EksFargateClusterStack
+from my_fastapi_eks.fargate.eks_fargate_fastapi_service_stack import EksFargateFastApiServiceStack
 
 
 app = cdk.App()
@@ -13,6 +13,11 @@ app = cdk.App()
 fargate_cluster_stack = EksFargateClusterStack(
     app,
     "EksFargateClusterStack",
+    stack_name="EksFargateClusterStack",
+    tags={
+        "project": "fargate-eks",
+        "env": "dev",
+    },
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
 )
 
@@ -21,6 +26,10 @@ fastapi_service_stack = EksFargateFastApiServiceStack(
     app,
     "EksFargateFastApiServiceStack",
     cluster=fargate_cluster_stack.eks_cluster,
+    tags={
+        "project": "fargate-eks",
+        "env": "dev",
+    },
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
 )
 
