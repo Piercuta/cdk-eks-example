@@ -26,6 +26,7 @@ fastapi_service_stack = EksFargateFastApiServiceStack(
     app,
     "EksFargateFastApiServiceStack",
     cluster=fargate_cluster_stack.eks_cluster,
+    alb_chart=fargate_cluster_stack.alb_chart,
     tags={
         "project": "fargate-eks",
         "env": "dev",

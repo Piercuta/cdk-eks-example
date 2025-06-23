@@ -13,27 +13,20 @@ import json
 
 class EksFargateFastApiServiceStack(Stack):
 
-    def __init__(self, scope: Construct, construct_id: str, cluster: eks.FargateCluster, **kwargs) -> None:
+    def __init__(
+            self,
+            scope: Construct,
+            construct_id: str,
+            cluster: eks.FargateCluster,
+            alb_chart: eks.HelmChart,
+            **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         self.cluster = cluster
 
-        # 1. Create namespace for FastAPI application
-        fastapi_namespace = {
-            "apiVersion": "v1",
-            "kind": "Namespace",
-            "metadata": {
-                "name": "fastapi",
-                "labels": {
-                    "name": "fastapi"
-                }
-            }
-        }
-        cluster.add_manifest("FastApiNamespace", fastapi_namespace)
-
-        # 2. FastAPI Deployment for Fargate
+        # 1. FastAPI Deployment for Fargate
         # Note: Fargate requires specific resource requests and limits
-        fastapi_deployment = {
+        deployment = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "metadata": {
@@ -98,10 +91,10 @@ class EksFargateFastApiServiceStack(Stack):
                 }
             }
         }
-        cluster.add_manifest("FastApiDeployment", fastapi_deployment)
+        fastapi_deployment = cluster.add_manifest("FastApiDeployment", deployment)
 
         # 3. FastAPI Service
-        fastapi_service = {
+        service = {
             "apiVersion": "v1",
             "kind": "Service",
             "metadata": {
@@ -125,10 +118,10 @@ class EksFargateFastApiServiceStack(Stack):
                 "type": "LoadBalancer"
             }
         }
-        cluster.add_manifest("FastApiService", fastapi_service)
+        fastapi_service = cluster.add_manifest("FastApiService", service)
 
         # 4. Ingress for FastAPI (using ALB Controller)
-        fastapi_ingress = {
+        ingress = {
             "apiVersion": "networking.k8s.io/v1",
             "kind": "Ingress",
             "metadata": {
@@ -166,10 +159,10 @@ class EksFargateFastApiServiceStack(Stack):
                 }]
             }
         }
-        cluster.add_manifest("FastApiIngress", fastapi_ingress)
+        fastapi_ingress = cluster.add_manifest("FastApiIngress", ingress)
 
         # 5. Horizontal Pod Autoscaler for Fargate
-        fastapi_hpa = {
+        hpa = {
             "apiVersion": "autoscaling/v2",
             "kind": "HorizontalPodAutoscaler",
             "metadata": {
@@ -208,10 +201,10 @@ class EksFargateFastApiServiceStack(Stack):
                 ]
             }
         }
-        cluster.add_manifest("FastApiHPA", fastapi_hpa)
+        fastapi_hpa = cluster.add_manifest("FastApiHPA", hpa)
 
         # 6. ConfigMap for FastAPI configuration
-        fastapi_config = {
+        config = {
             "apiVersion": "v1",
             "kind": "ConfigMap",
             "metadata": {
@@ -224,17 +217,10 @@ class EksFargateFastApiServiceStack(Stack):
                 "LOG_LEVEL": "info"
             }
         }
-        cluster.add_manifest("FastApiConfig", fastapi_config)
+        fastapi_config = cluster.add_manifest("FastApiConfig", config)
 
-        # 7. Service Account for FastAPI (if needed for AWS services)
-        fastapi_sa = cluster.add_service_account(
-            "FastApiServiceAccount",
-            name="fastapi-sa",
-            namespace="fastapi"
-        )
-
-        # 8. Network Policy for FastAPI (optional security)
-        fastapi_network_policy = {
+        # 7. Network Policy for FastAPI (optional security)
+        network_policy = {
             "apiVersion": "networking.k8s.io/v1",
             "kind": "NetworkPolicy",
             "metadata": {
@@ -261,29 +247,29 @@ class EksFargateFastApiServiceStack(Stack):
                 }]
             }
         }
-        cluster.add_manifest("FastApiNetworkPolicy", fastapi_network_policy)
+        fastapi_network_policy = cluster.add_manifest("FastApiNetworkPolicy", network_policy)
 
-        # 9. Pod Disruption Budget for high availability
-        fastapi_pdb = {
-            "apiVersion": "policy/v1",
-            "kind": "PodDisruptionBudget",
-            "metadata": {
-                "name": "fastapi-pdb",
-                "namespace": "fastapi"
-            },
-            "spec": {
-                "minAvailable": 1,
-                "selector": {
-                    "matchLabels": {
-                        "app": "fastapi"
-                    }
-                }
-            }
-        }
-        cluster.add_manifest("FastApiPDB", fastapi_pdb)
+        # # 9. Pod Disruption Budget for high availability
+        # fastapi_pdb = {
+        #     "apiVersion": "policy/v1",
+        #     "kind": "PodDisruptionBudget",
+        #     "metadata": {
+        #         "name": "fastapi-pdb",
+        #         "namespace": "fastapi"
+        #     },
+        #     "spec": {
+        #         "minAvailable": 1,
+        #         "selector": {
+        #             "matchLabels": {
+        #                 "app": "fastapi"
+        #             }
+        #         }
+        #     }
+        # }
+        # cluster.add_manifest("FastApiPDB", fastapi_pdb)
 
         # Store references for potential use in other stacks
-        self.fastapi_namespace = fastapi_namespace
-        self.fastapi_deployment = fastapi_deployment
-        self.fastapi_service = fastapi_service
-        self.fastapi_ingress = fastapi_ingress
+        fastapi_deployment.node.add_dependency(alb_chart)
+        fastapi_service.node.add_dependency(fastapi_deployment)
+        fastapi_hpa.node.add_dependency(fastapi_service)
+        fastapi_ingress.node.add_dependency(fastapi_hpa)
