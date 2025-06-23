@@ -124,7 +124,7 @@ class EksClassicFastApiServiceStack(Stack):
                     }
                 }],
                 "tls": [{
-                    "hosts": ["my-fastapi.piercuta.com"]
+                    "hosts": ["classic-eks-fastapi.piercuta.com"]
                 }]
             }
         }
@@ -159,7 +159,7 @@ class EksClassicFastApiServiceStack(Stack):
         recort_set = route53.CnameRecord(
             self, "FastApiCnameRecord",
             zone=hosted_zone,
-            record_name="my-fastapi",
+            record_name="classic-eks-fastapi",
             domain_name=cluster.get_ingress_load_balancer_address(
                 ingress_name="fastapi-ingress",
                 namespace="default"

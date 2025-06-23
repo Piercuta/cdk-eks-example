@@ -13,7 +13,7 @@ app = cdk.App()
 fargate_cluster_stack = EksFargateClusterStack(
     app,
     "EksFargateClusterStack",
-    stack_name="EksFargateClusterStack",
+    stack_name="EksFargateClusterStac",
     tags={
         "project": "fargate-eks",
         "env": "dev",

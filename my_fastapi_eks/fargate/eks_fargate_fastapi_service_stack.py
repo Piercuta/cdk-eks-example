@@ -37,7 +37,7 @@ class EksFargateFastApiServiceStack(Stack):
                 }
             },
             "spec": {
-                "replicas": 2,
+                "replicas": 1,
                 "selector": {
                     "matchLabels": {
                         "app": "fastapi"
@@ -64,22 +64,22 @@ class EksFargateFastApiServiceStack(Stack):
                                     "memory": "1Gi"
                                 }
                             },
-                            "livenessProbe": {
-                                "httpGet": {
-                                    "path": "/health",
-                                    "port": 8000
-                                },
-                                "initialDelaySeconds": 30,
-                                "periodSeconds": 10
-                            },
-                            "readinessProbe": {
-                                "httpGet": {
-                                    "path": "/health",
-                                    "port": 8000
-                                },
-                                "initialDelaySeconds": 5,
-                                "periodSeconds": 5
-                            },
+                            # "livenessProbe": {
+                            #     "httpGet": {
+                            #         "path": "/health",
+                            #         "port": 8000
+                            #     },
+                            #     "initialDelaySeconds": 30,
+                            #     "periodSeconds": 10
+                            # },
+                            # "readinessProbe": {
+                            #     "httpGet": {
+                            #         "path": "/health",
+                            #         "port": 8000
+                            #     },
+                            #     "initialDelaySeconds": 5,
+                            #     "periodSeconds": 5
+                            # },
                             "env": [
                                 {
                                     "name": "ENVIRONMENT",
@@ -93,18 +93,14 @@ class EksFargateFastApiServiceStack(Stack):
         }
         fastapi_deployment = cluster.add_manifest("FastApiDeployment", deployment)
 
-        # 3. FastAPI Service
+        # 3. FastAPI Service - Changer en ClusterIP
         service = {
             "apiVersion": "v1",
             "kind": "Service",
             "metadata": {
                 "name": "fastapi-service",
-                "namespace": "fastapi",
-                "annotations": {
-                    "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
-                    "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-                    "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip"
-                }
+                "namespace": "fastapi"
+                # Supprimer les annotations ALB
             },
             "spec": {
                 "selector": {
@@ -115,7 +111,7 @@ class EksFargateFastApiServiceStack(Stack):
                     "targetPort": 8000,
                     "protocol": "TCP"
                 }],
-                "type": "LoadBalancer"
+                "type": "ClusterIP"  # Au lieu de LoadBalancer
             }
         }
         fastapi_service = cluster.add_manifest("FastApiService", service)
@@ -128,19 +124,15 @@ class EksFargateFastApiServiceStack(Stack):
                 "name": "fastapi-ingress",
                 "namespace": "fastapi",
                 "annotations": {
-                    "kubernetes.io/ingress.class": "alb",
                     "alb.ingress.kubernetes.io/scheme": "internet-facing",
                     "alb.ingress.kubernetes.io/target-type": "ip",
                     "alb.ingress.kubernetes.io/listen-ports": '[{"HTTP": 80}, {"HTTPS": 443}]',
+                    "alb.ingress.kubernetes.io/certificate-arn": "arn:aws:acm:eu-west-1:532673134317:certificate/905d0d16-87e8-4e89-a88c-b6053f472e81",
                     "alb.ingress.kubernetes.io/ssl-redirect": "443",
-                    "alb.ingress.kubernetes.io/healthcheck-path": "/health",
-                    "alb.ingress.kubernetes.io/healthcheck-port": "8000",
-                    "alb.ingress.kubernetes.io/success-codes": "200,302",
-                    "alb.ingress.kubernetes.io/group.name": "fastapi",
-                    "alb.ingress.kubernetes.io/group.order": "1"
                 }
             },
             "spec": {
+                "ingressClassName": "alb",
                 "rules": [{
                     "http": {
                         "paths": [{
@@ -156,12 +148,16 @@ class EksFargateFastApiServiceStack(Stack):
                             }
                         }]
                     }
+                }],
+                "tls": [{
+                    "hosts": ["fargate-eks-fastapi.piercuta.com"]
                 }]
             }
         }
         fastapi_ingress = cluster.add_manifest("FastApiIngress", ingress)
 
         # 5. Horizontal Pod Autoscaler for Fargate
+        # Useless with fargate !
         hpa = {
             "apiVersion": "autoscaling/v2",
             "kind": "HorizontalPodAutoscaler",
@@ -175,8 +171,8 @@ class EksFargateFastApiServiceStack(Stack):
                     "kind": "Deployment",
                     "name": "fastapi-app"
                 },
-                "minReplicas": 2,
-                "maxReplicas": 10,
+                "minReplicas": 1,
+                "maxReplicas": 5,
                 "metrics": [
                     {
                         "type": "Resource",
@@ -187,89 +183,33 @@ class EksFargateFastApiServiceStack(Stack):
                                 "averageUtilization": 70
                             }
                         }
-                    },
-                    {
-                        "type": "Resource",
-                        "resource": {
-                            "name": "memory",
-                            "target": {
-                                "type": "Utilization",
-                                "averageUtilization": 80
-                            }
-                        }
                     }
                 ]
             }
         }
         fastapi_hpa = cluster.add_manifest("FastApiHPA", hpa)
 
-        # 6. ConfigMap for FastAPI configuration
-        config = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {
-                "name": "fastapi-config",
-                "namespace": "fastapi"
-            },
-            "data": {
-                "APP_HOST": "0.0.0.0",
-                "APP_PORT": "8000",
-                "LOG_LEVEL": "info"
-            }
-        }
-        fastapi_config = cluster.add_manifest("FastApiConfig", config)
-
-        # 7. Network Policy for FastAPI (optional security)
-        network_policy = {
-            "apiVersion": "networking.k8s.io/v1",
-            "kind": "NetworkPolicy",
-            "metadata": {
-                "name": "fastapi-network-policy",
-                "namespace": "fastapi"
-            },
-            "spec": {
-                "podSelector": {
-                    "matchLabels": {
-                        "app": "fastapi"
-                    }
-                },
-                "policyTypes": ["Ingress", "Egress"],
-                "ingress": [{
-                    "ports": [{
-                        "protocol": "TCP",
-                        "port": 8000
-                    }]
-                }],
-                "egress": [{
-                    "to": [{
-                        "namespaceSelector": {}
-                    }]
-                }]
-            }
-        }
-        fastapi_network_policy = cluster.add_manifest("FastApiNetworkPolicy", network_policy)
-
-        # # 9. Pod Disruption Budget for high availability
-        # fastapi_pdb = {
-        #     "apiVersion": "policy/v1",
-        #     "kind": "PodDisruptionBudget",
-        #     "metadata": {
-        #         "name": "fastapi-pdb",
-        #         "namespace": "fastapi"
-        #     },
-        #     "spec": {
-        #         "minAvailable": 1,
-        #         "selector": {
-        #             "matchLabels": {
-        #                 "app": "fastapi"
-        #             }
-        #         }
-        #     }
-        # }
-        # cluster.add_manifest("FastApiPDB", fastapi_pdb)
-
         # Store references for potential use in other stacks
         fastapi_deployment.node.add_dependency(alb_chart)
         fastapi_service.node.add_dependency(fastapi_deployment)
         fastapi_hpa.node.add_dependency(fastapi_service)
         fastapi_ingress.node.add_dependency(fastapi_hpa)
+
+        # 5. A Record pointant vers l'ALB
+        hosted_zone = route53.HostedZone.from_lookup(
+            self, "HostedZone",
+            domain_name="piercuta.com"
+        )
+
+        recort_set = route53.CnameRecord(
+            self, "FastApiCnameRecord",
+            zone=hosted_zone,
+            record_name="fargate-eks-fastapi",
+            domain_name=cluster.get_ingress_load_balancer_address(
+                ingress_name="fastapi-ingress",
+                namespace="fastapi"
+            ),
+            ttl=Duration.minutes(5)
+        )
+
+        recort_set.node.add_dependency(fastapi_ingress)

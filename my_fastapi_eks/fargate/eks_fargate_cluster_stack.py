@@ -125,6 +125,7 @@ class EksFargateClusterStack(Stack):
         metrics_server_chart = cluster.add_helm_chart(
             "MetricsServer",
             chart="metrics-server",
+            release="metrics-server",
             repository="https://kubernetes-sigs.github.io/metrics-server/",
             namespace="kube-system",
             values={
@@ -136,30 +137,6 @@ class EksFargateClusterStack(Stack):
         )
 
         metrics_server_chart.node.add_dependency(cloudwatch_chart)
-
-        # 7. CoreDNS
-        coredns_chart = cluster.add_helm_chart(
-            "CoreDNS",
-            chart="coredns",
-            repository="https://coredns.github.io/helm",
-            namespace="kube-system",
-            release="coredns",
-            values={
-                "replicaCount": 2,
-                "resources": {
-                    "requests": {
-                        "cpu": "100m",
-                        "memory": "128Mi"
-                    },
-                    "limits": {
-                        "cpu": "200m",
-                        "memory": "256Mi"
-                    }
-                }
-            }
-        )
-
-        coredns_chart.node.add_dependency(metrics_server_chart)
 
         # 8. AWS Load Balancer Controller
         alb_sa = cluster.add_service_account(
@@ -177,7 +154,7 @@ class EksFargateClusterStack(Stack):
             iam.Policy(self, "ALBControllerIAMPolicy", document=alb_policy)
         )
 
-        alb_sa.node.add_dependency(coredns_chart)
+        alb_sa.node.add_dependency(metrics_server_chart)
 
         alb_chart = cluster.add_helm_chart(
             "AWSLoadBalancerController",
