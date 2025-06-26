@@ -18,21 +18,21 @@ eks_cluster_stack = EksClassicClusterStack(
     env=cdk.Environment(account="532673134317", region="eu-west-1"),
 )
 
-eks_service_stack = EksClassicFastApiServiceStack(
-    app,
-    "EksClassicFastApiServiceStack",
-    stack_name="EksClassicFastApiServiceStack",
-    cluster=eks_cluster_stack.eks_cluster,
-    alb_chart=eks_cluster_stack.alb_chart,
-    metric_server=eks_cluster_stack.metrics_server,
-    tags={
-        "project": "classic-eks",
-        "env": "dev",
-    },
-    env=cdk.Environment(account="532673134317", region="eu-west-1"),
-)
+# eks_service_stack = EksClassicFastApiServiceStack(
+#     app,
+#     "EksClassicFastApiServiceStack",
+#     stack_name="EksClassicFastApiServiceStack",
+#     cluster=eks_cluster_stack.eks_cluster,
+#     alb_chart=eks_cluster_stack.alb_chart,
+#     metric_server=eks_cluster_stack.metrics_server,
+#     tags={
+#         "project": "classic-eks",
+#         "env": "dev",
+#     },
+#     env=cdk.Environment(account="532673134317", region="eu-west-1"),
+# )
 
-eks_service_stack.add_dependency(eks_cluster_stack)
+# eks_service_stack.add_dependency(eks_cluster_stack)
 
 
 app.synth()

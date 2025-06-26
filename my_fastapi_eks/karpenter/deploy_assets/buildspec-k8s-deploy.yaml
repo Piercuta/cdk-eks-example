@@ -1,0 +1,44 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.x
+    commands:
+      - echo "Installing tools..."
+      - echo Installing kubectl...
+      - curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.32.3/2025-04-17/bin/linux/amd64/kubectl
+      - chmod +x ./kubectl
+      - mv ./kubectl /usr/local/bin
+      - kubectl version --client
+      - echo "Installing gettext for envsubst"
+      - apt install -y gettext
+
+  pre_build:
+    commands:
+      - echo "Configuring AWS and Kubeconfig..."
+      - aws sts get-caller-identity
+      - aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
+      - kubectl version --client
+      - kubectl get nodes
+
+  build:
+    commands:
+
+      - echo Tagging EKS Cluster SG
+      - SG_ID=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
+      - echo "Cluster SG ID $SG_ID"
+      - aws ec2 create-tags --resources $SG_ID --tags Key=karpenter.sh/discovery,Value=$EKS_CLUSTER_NAME
+
+      - echo "Applying Karpenter manifest..."
+      - envsubst < k8s_manifests/karpenter-pool.yaml | kubectl apply -f -
+
+      - echo "Applying FastAPI manifest..."
+      - envsubst < k8s_manifests/fast-api.yaml | kubectl apply -f -
+
+      - echo "Checking deployment..."
+      #- kubectl rollout status deployment/fastapi -n default
+      - kubectl get pods -n default
+
+artifacts:
+  files: []
